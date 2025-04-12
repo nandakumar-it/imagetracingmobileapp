@@ -1,94 +1,110 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:screen_brightness/screen_brightness.dart';
 
 void main() {
-  runApp(const TracerApp());
+  runApp(const MyApp());
 }
 
-class TracerApp extends StatelessWidget {
-  const TracerApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Papercopy Tracer',
+      title: 'Image Tracer Lock Demo',
+      home: const ImageLockScreen(),
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const HomeScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class ImageLockScreen extends StatefulWidget {
+  const ImageLockScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<ImageLockScreen> createState() => _ImageLockScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  File? _image;
+class _ImageLockScreenState extends State<ImageLockScreen> {
+  File? _selectedImage;
+  bool _isLocked = false;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _image = File(image.path);
-      });
-      // Keep screen awake and set max brightness
-      await WakelockPlus.enable();
-      await ScreenBrightness().setScreenBrightness(1.0);
+    final picked = await picker.pickImage(source: ImageSource.gallery);
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TracerScreen(imageFile: _image!),
-        ),
-      );
+    if (picked != null) {
+      setState(() {
+        _selectedImage = File(picked.path);
+        _isLocked = true; // Lock screen after image upload
+      });
+
+      // Keep the screen on while tracing
+      await WakelockPlus.enable();
     }
   }
 
-  @override
-  void dispose() {
-    WakelockPlus.disable();
-    super.dispose();
+  void _unlockScreen() async {
+    setState(() {
+      _isLocked = false;
+    });
+
+    // Optional: Allow screen to sleep after unlocking
+    await WakelockPlus.disable();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Papercopy Tracer')),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: _pickImage,
-          child: const Text('Select Image to Trace'),
+      appBar: AppBar(
+        title: const Text('Papercopy - Tracer'),
+      ),
+      body: AbsorbPointer(
+        absorbing: _isLocked,
+        child: Stack(
+          children: [
+            Center(
+              child: _selectedImage != null
+                  ? Image.file(_selectedImage!)
+                  : const Text('No image selected'),
+            ),
+            if (_isLocked)
+              Container(
+                color: Colors.black.withOpacity(0.5), // Visual lock
+                alignment: Alignment.center,
+                child: const Text(
+                  'Screen Locked\nTap + or - to unlock',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-class TracerScreen extends StatelessWidget {
-  final File imageFile;
-  const TracerScreen({super.key, required this.imageFile});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        // Tap anywhere to return
-        await WakelockPlus.disable();
-        await ScreenBrightness().resetScreenBrightness();
-        Navigator.pop(context);
-      },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Image.file(imageFile, fit: BoxFit.contain),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _pickImage,
+              icon: const Icon(Icons.image),
+              label: const Text("Upload Image"),
+            ),
+            ElevatedButton.icon(
+              onPressed: _unlockScreen,
+              icon: const Icon(Icons.add),
+              label: const Text("Audio +"),
+            ),
+            ElevatedButton.icon(
+              onPressed: _unlockScreen,
+              icon: const Icon(Icons.remove),
+              label: const Text("Audio -"),
+            ),
+          ],
         ),
       ),
     );
